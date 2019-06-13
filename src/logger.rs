@@ -1,5 +1,3 @@
-#![cfg_attr(not(feature = "log"), allow(unused))]
-
 use {
     bbqueue::{bbq, BBQueue, Consumer, Producer},
     core::{cell::RefCell, fmt},
@@ -9,7 +7,6 @@ use {
     rubble_nrf51::timer::StampSource,
 };
 
-#[cfg(feature = "log")]
 use log::{LevelFilter, Log, Metadata, Record};
 
 /// A `fmt::Write` adapter that prints a timestamp before each line.
@@ -99,7 +96,6 @@ impl<W: fmt::Write + Send> WriteLogger<W> {
     }
 }
 
-#[cfg(feature = "log")]
 impl<W: fmt::Write + Send> Log for WriteLogger<W> {
     fn enabled(&self, _metadata: &Metadata) -> bool {
         true
@@ -124,7 +120,6 @@ type LogTimer = pac::TIMER0;
 /// Stores the global logger used by the `log` crate.
 static mut LOGGER: Option<WriteLogger<Logger>> = None;
 
-#[cfg(feature = "log")]
 pub fn init(timer: StampSource<LogTimer>) -> Consumer {
     let (tx, log_sink) = bbq![10000].unwrap().split();
     let logger = StampedLogger::new(BbqLogger::new(tx), timer);
@@ -140,9 +135,4 @@ pub fn init(timer: StampSource<LogTimer>) -> Consumer {
     log::info!("Logger ready");
 
     log_sink
-}
-
-#[cfg(not(feature = "log"))]
-pub fn init(timer: StampSource<LogTimer>) -> Consumer {
-    bbq![1].unwrap().split().1
 }
