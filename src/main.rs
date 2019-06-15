@@ -12,6 +12,7 @@ use {
     core::fmt::Write,
     cortex_m_semihosting::hprintln,
     nrf51_hal::{
+        nb::block,
         nrf51::{self as pac, UART0},
         prelude::*,
         serial::{Serial, Tx, BAUDRATEW},
@@ -100,7 +101,7 @@ const APP: () = {
             let rxd = pins.pin11.downgrade();
             let txd = pins.pin9.into_push_pull_output().downgrade();
 
-            Serial::uart0(device.UART0, txd, rxd, BAUDRATEW::BAUD460800)
+            Serial::uart0(device.UART0, txd, rxd, BAUDRATEW::BAUD921600)
                 .split()
                 .0
         };
@@ -125,11 +126,16 @@ const APP: () = {
         };
         let device_address = DeviceAddress::new(devaddr, devaddr_type);
 
-        let mut radio = BleRadio::new(device.RADIO, resources.BLE_TX_BUF, resources.BLE_RX_BUF);
+        let mut radio = BleRadio::new(
+            device.RADIO,
+            &device.FICR,
+            resources.BLE_TX_BUF,
+            resources.BLE_RX_BUF,
+        );
 
         let beacon = Beacon::new(
             device_address,
-            &[AdStructure::CompleteLocalName("Rusty Beacon (nRF52)")],
+            &[AdStructure::CompleteLocalName("Rusty Beacon (nRF51)")],
         )
         .unwrap();
 
@@ -155,7 +161,7 @@ const APP: () = {
             let next_update = ll
                 .start_advertise(
                     Duration::from_millis(200),
-                    &[AdStructure::CompleteLocalName("CONCVRRENS CERTA CELERIS")],
+                    &[AdStructure::CompleteLocalName("CONCVRRENS CERTA CELERI2")],
                     &mut radio,
                     tx_cons,
                     rx_prod,
@@ -213,13 +219,16 @@ const APP: () = {
         loop {
             while let Ok(grant) = resources.LOG_SINK.read() {
                 for byte in grant.buf() {
-                    resources.SERIAL.write(*byte).unwrap();
+                    block!(resources.SERIAL.write(*byte)).expect("Failed to write to serial");
                 }
 
                 resources.LOG_SINK.release(grant.buf().len(), grant);
             }
             if resources.BLE_R.has_work() {
-                resources.BLE_R.process_one().unwrap();
+                resources
+                    .BLE_R
+                    .process_one()
+                    .expect("Failed to process incoming packet");
             }
         }
     }

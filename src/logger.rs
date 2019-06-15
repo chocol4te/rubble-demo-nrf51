@@ -3,7 +3,7 @@ use {
     core::{cell::RefCell, fmt},
     cortex_m::interrupt::{self, Mutex},
     nrf51_hal::nrf51 as pac,
-    rubble::time::Timer,
+    rubble::{extern_log as log, time::Timer},
     rubble_nrf51::timer::StampSource,
 };
 
@@ -105,7 +105,8 @@ impl<W: fmt::Write + Send> Log for WriteLogger<W> {
         if self.enabled(record.metadata()) {
             interrupt::free(|cs| {
                 let mut writer = self.writer.borrow(cs).borrow_mut();
-                writeln!(writer, "{} - {}", record.level(), record.args()).unwrap();
+                writeln!(writer, "{} - {}", record.level(), record.args())
+                    .expect("writing log record failed");
             })
         }
     }
@@ -117,18 +118,17 @@ type Logger = StampedLogger<StampSource<LogTimer>, BbqLogger>;
 
 type LogTimer = pac::TIMER0;
 
-/// Stores the global logger used by the `log` crate.
 static mut LOGGER: Option<WriteLogger<Logger>> = None;
 
 pub fn init(timer: StampSource<LogTimer>) -> Consumer {
-    let (tx, log_sink) = bbq![10000].unwrap().split();
+    let (tx, log_sink) = bbq![10000].expect("Creating bbqueue failed").split();
     let logger = StampedLogger::new(BbqLogger::new(tx), timer);
 
     let log = WriteLogger::new(logger);
     interrupt::free(|_| unsafe {
-        // Safe, since we're the only thread and interrupts are off
         LOGGER = Some(log);
-        log::set_logger_racy(LOGGER.as_ref().unwrap()).unwrap();
+        log::set_logger_racy(LOGGER.as_ref().expect("LOGGER was None, should be Some"))
+            .expect("Failed to set logger");
     });
     log::set_max_level(LevelFilter::max());
 
